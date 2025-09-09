@@ -19,28 +19,54 @@ namespace OpenEXR_radiation_converter
                 float[] rgba;
                 int xPixels, yPixels;
                 ResultCode result = Exr.LoadEXR(path, out rgba, out xPixels, out yPixels);
+                Console.WriteLine(result.ToString());
 
-                float min = float.MaxValue, max = float.MinValue;
-                for (int i = 0; i < rgba.Length; ++i)
+                if(result == 0)
                 {
-                    float pixelValue = rgba[i]; 
-                    if(pixelValue < min)
+                    float min = float.MaxValue, max = float.MinValue;
+                    for (int y = 0; y < yPixels; ++y)
                     {
-                        min = pixelValue;
+                        for (int x = 0; x < xPixels; ++x)
+                        {
+                            int index = 4 * x + y * xPixels * 4;
+                            float r = rgba[index];
+                            float g = rgba[index + 1];
+                            float b = rgba[index + 2];
+                            float a = rgba[index + 3];
+                            float pixelValue = (r + g + b) / 3f; //assume grey scale
+
+                            if (pixelValue < min)
+                            {
+                                min = pixelValue;
+                            }
+                            if (pixelValue > max)
+                            {
+                                max = pixelValue;
+                            }
+                        }
                     }
-                    if(pixelValue > max)
+                    Console.WriteLine("Min value: " + min + ". Max value: " + max);
+
+                    Image<SixLabors.ImageSharp.PixelFormats.Argb32> output = new Image<SixLabors.ImageSharp.PixelFormats.Argb32>(xPixels, yPixels);
+                    float range = max - min;
+                    for (int y = 0; y < yPixels; ++y)
                     {
-                        max = pixelValue;
+                        for (int x = 0; x < xPixels; ++x)
+                        {
+                            int index = 4 * x + y * xPixels * 4;
+                            float r = rgba[index];
+                            float g = rgba[index + 1];
+                            float b = rgba[index + 2];
+                            float a = rgba[index + 3];
+                            float pixelValue = (r + g + b) / 3f;
+                            float normalizedValue = (pixelValue - min) / range;
+                            Color c = GetColorRange(normalizedValue);
+
+                            output[x, y] = c;
+                        }
                     }
-                }
-                Console.WriteLine("Min value: " + min + ". Max value: " + max);
-
-                for (int i = 0; i < rgba.Length; ++i)
-                {
-                    float pixelValue = rgba[i];
-                    rgba[i] = 
-                }
-
+                    output.SaveAsPng(Path.GetFileNameWithoutExtension(path) + "_output.png");
+                }                
             }
             else
             {
@@ -49,43 +75,24 @@ namespace OpenEXR_radiation_converter
             }
         }
 
-        private static Color TemperatureRange(double BlueToRed)
+        //based on the kry color map range
+        private static Color GetColorRange(float normalizedValue)
         {
-            double r, g, b;
+            SixLabors.ImageSharp.PixelFormats.Argb32 color = new SixLabors.ImageSharp.PixelFormats.Argb32(0, 0, 0);
 
-            // blue to cyan
-            if (BlueToRed < -0.5)
+            //from black to red
+            if(normalizedValue < 0.5f)
             {
-                r = 0;
-                g = 2 + BlueToRed * 2;
-                b = 1;
+                color.R = (byte)(255 * 2f * normalizedValue);
             }
-
-            // cyan to green
-            else if (BlueToRed < 0)
-            {
-                r = 0;
-                g = 1;
-                b = -BlueToRed * 2;
-            }
-
-            // green to yellow
-            else if (BlueToRed < 0.5)
-            {
-                r = BlueToRed * 2;
-                g = 1;
-                b = 0;
-            }
-
-            // yellow to red
+            //from red to yellow
             else
             {
-                r = 1;
-                g = 2 - BlueToRed * 2;
-                b = 0;
+                color.R = 255;
+                color.G = (byte)(255 * (2f * normalizedValue - 1f));
             }
 
-            return Color.FromArgb((int)(r * 255), (int)(g * 255), (int)(b * 255));
+            return new Color(color);
         }
     }   
 }
